@@ -24,18 +24,17 @@ class Q_Agent:
         #NUMERO DE ACCIONES A "RECORDAR"
         self.memory = deque(maxlen=300)
         #RAZON DE DESCUENTO
-        self.gamma = 0.99
+        self.gamma = 0.95
 
         #RAZON DE EXPLORACION
         self.epsilon = 1.0
         #EPSILON MINIMO
-        self.min_epsilon = 0.05
+        self.min_epsilon = 0.1
         #DESCUENTO DEL EPSILON
-        self.decay_epsilon = 0.9999
-        #DESCUENTO DEL DESCUENTO
+        self.decay_epsilon = 0.99995       #DESCUENTO DEL DESCUENTO
         #self.decay_decay = 0.99999
         #RAZON DE APRENDIZAJE
-        self.learning_rate = 0.3
+        self.learning_rate = 0.9
         #MODELO CREADO
         self.model =self._build_model()
 
@@ -112,14 +111,14 @@ def main():
 
     state_size = env.reset()[23:207,72:182].shape
     #disparar - izquierda - derecha - esperar
-    action_size = 60
+    action_size = 30
     agent = Q_Agent(state_size, action_size)
     print(state_size)
     done = False
-    batch_size = 50
+    batch_size = 40
     episodes = 1000000
     try:
-        agent.load('pesos.h5')
+        agent.load('pesos30.h5')
         pass
     except:
         print("error")
@@ -137,10 +136,10 @@ def main():
             action = agent.act(state)
             #no hay angulo 64 en el juego
 
-            if action==30:
-                action=31
-            shoot_angle = 2*action+4
 
+            shoot_angle = 4*action+4
+            if shoot_angle==64:
+                shoot_angle=65
             next_state, reward, done, _a = env.step(agent.toBinary(3))
             #print("AAAA",_a['arrow2'])
             #print("BBBB", _a['arrow'])
@@ -159,7 +158,7 @@ def main():
             #print("AAAA", _a['arrow2'])
             #print("BBBB", _a['arrow'])
 
-            #time.sleep(4)
+            #time.sleep(2)
 
             while angle!=shoot_angle:
                 # time.sleep(0.008)
@@ -191,6 +190,7 @@ def main():
             #print(type(weaaa))
 
             #env.data.set_variable('arrow',10)
+
             #env.render()
             next_score = _a['bubbles']
             #env.data
@@ -206,10 +206,11 @@ def main():
             #    reward = -1.0
             #else:
             #    reward = math.log(next_score-current_score)
+            recompensa = next_score-current_score
             current_score=next_score
-            env.render()
+            #   env.render()
             if done:
-                reward=-math.log(10000)
+                recompensa=-10
                 print("Final score:",current_score)
             #print(current_score)
             #print(_a)
@@ -217,7 +218,8 @@ def main():
             #reward = _a['score_jyuu']
             next_state = next_state[23:207,72:182]
             next_state = next_state.reshape(state.shape).astype('float16')/256.0
-            agent.remember(state, action, reward, next_state, done)
+            #print("mi reward es ",recompensa)
+            agent.remember(state, action, recompensa, next_state, done)
             state = next_state
         #print("replay")
 
@@ -225,10 +227,10 @@ def main():
         #print("termino")
         print(e,":")
         print(agent.epsilon)
-        if e % 10 == 0:
+        if e % 50 == 0:
             env.load_state(random.choice(ESTADOS))
             print("guarda3")
-            agent.save("pesos.h5")
+            agent.save("pesos30.h5")
 
 
 
