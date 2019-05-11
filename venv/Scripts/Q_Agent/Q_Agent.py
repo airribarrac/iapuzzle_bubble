@@ -31,10 +31,10 @@ class Q_Agent:
         #EPSILON MINIMO
         self.min_epsilon = 0.1
         #DESCUENTO DEL EPSILON
-        self.decay_epsilon = 0.99995       #DESCUENTO DEL DESCUENTO
+        self.decay_epsilon = 0.999       #DESCUENTO DEL DESCUENTO
         #self.decay_decay = 0.99999
         #RAZON DE APRENDIZAJE
-        self.learning_rate = 0.9
+        self.learning_rate = 0.1
         #MODELO CREADO
         self.model =self._build_model()
 
@@ -59,7 +59,7 @@ class Q_Agent:
         model.add(Dense(300,activation='relu'))
         model.add(Dense(800,activation='relu'))
         model.add(Dense(800, activation='relu'))
-        model.add(Dense(800, activation='relu'))
+        model.add(Dense(800, activation='sigmoid'))
         model.add(Dense(100, activation='relu'))
         model.add(Dense(100, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
@@ -207,10 +207,11 @@ def main():
             #else:
             #    reward = math.log(next_score-current_score)
             recompensa = next_score-current_score
+            recompensa = recompensa*recompensa
             current_score=next_score
             #   env.render()
             if done:
-                recompensa=-10
+                recompensa=-100
                 print("Final score:",current_score)
             #print(current_score)
             #print(_a)
