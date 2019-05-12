@@ -8,7 +8,7 @@ import math
 import retro
 import keyboard
 import time
-
+import matplotlib.pyplot as plt
 LEVELS = ['BustAMove.1pplay.Level10','BustAMove.1pplay.Level20','BustAMove.1pplay.Level30',
            'BustAMove.1pplay.Level40','BustAMove.1pplay.Level50','BustAMove.1pplay.Level60',
            'BustAMove.1pplay.Level70','BustAMove.1pplay.Level80','BustAMove.1pplay.Level90',
@@ -31,10 +31,10 @@ class Q_Agent:
         #EPSILON MINIMO
         self.min_epsilon = 0.1
         #DESCUENTO DEL EPSILON
-        self.decay_epsilon = 0.999       #DESCUENTO DEL DESCUENTO
+        self.decay_epsilon = 0.9995         #DESCUENTO DEL DESCUENTO
         #self.decay_decay = 0.99999
         #RAZON DE APRENDIZAJE
-        self.learning_rate = 0.1
+        self.learning_rate = 0.05
         #MODELO CREADO
         self.model =self._build_model()
 
@@ -56,16 +56,14 @@ class Q_Agent:
         model.add(MaxPooling2D(pool_size=(3,3),input_shape=self.state_size))
         model.add(Conv2D(10,kernel_size=(3,3)))
         model.add(Flatten())
-        model.add(Dense(300,activation='relu'))
-        model.add(Dense(800,activation='relu'))
-        model.add(Dense(800, activation='relu'))
-        model.add(Dense(800, activation='sigmoid'))
-        model.add(Dense(100, activation='relu'))
-        model.add(Dense(100, activation='relu'))
+        model.add(Dense(1000, activation='hard_sigmoid'))
+        model.add(Dense(5000, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
         model.summary()
         model.compile(loss='mse',
                       optimizer=Adam(lr=self.learning_rate))
+        for layer in model.layers:
+            print(layer.input_shape)
         return model
 
     def remember(self,state,action,reward,next_state,done):
@@ -77,6 +75,7 @@ class Q_Agent:
         else:
             act_values = self.model.predict(state)
             accion = np.argmax(act_values[0])
+            #print(accion,act_values[0][accion])
         return accion
 
 
@@ -115,10 +114,13 @@ def main():
     agent = Q_Agent(state_size, action_size)
     print(state_size)
     done = False
-    batch_size = 40
+    batch_size = 20
     episodes = 1000000
+    nivelar = lambda x: 1.0 if x>127 else 0.0
+    func = np.vectorize(nivelar)
+    print(nivelar(255),nivelar(122))
     try:
-        agent.load('pesos30.h5')
+        agent.load('pesosconv.h5')
         pass
     except:
         print("error")
@@ -127,7 +129,10 @@ def main():
         state = env.reset()[23:207,72:182]
         current_score = 0.0
         done=False
-        state = state.reshape((1,state.shape[0],state.shape[1],state.shape[2])).astype('float16')/256.0
+
+        state = func(state).reshape((1,state.shape[0],state.shape[1],state.shape[2]))
+
+
         agent.model.predict([state])
         while not done:
             #env.render()
@@ -179,13 +184,16 @@ def main():
             #time.sleep(0.008)
             #time.sleep(tiempo_espera)
             next_state, reward, done, _a = env.step(agent.toBinary(3))
+            frames = 0
             while _a['ready_to_fire']==60963:
+                #frames+=1
                 #time.sleep(0.008)
                 #time.sleep(tiempo_espera)
                 #env.render()
                 next_state, reward, done, _a = env.step(agent.toBinary(3))
                 if done:
                     break
+            #print(frames)
             #weaaa = env.data.get_variable('arrow')
             #print(type(weaaa))
 
@@ -206,19 +214,18 @@ def main():
             #    reward = -1.0
             #else:
             #    reward = math.log(next_score-current_score)
-            recompensa = next_score-current_score
-            recompensa = recompensa*recompensa
+            recompensa = (next_score-current_score)**2
             current_score=next_score
-            #   env.render()
+            #env.render()
             if done:
-                recompensa=-100
+                recompensa=-10
                 print("Final score:",current_score)
             #print(current_score)
             #print(_a)
             #print(reward)
             #reward = _a['score_jyuu']
             next_state = next_state[23:207,72:182]
-            next_state = next_state.reshape(state.shape).astype('float16')/256.0
+            next_state = func(next_state).reshape(state.shape)
             #print("mi reward es ",recompensa)
             agent.remember(state, action, recompensa, next_state, done)
             state = next_state
@@ -231,7 +238,7 @@ def main():
         if e % 50 == 0:
             env.load_state(random.choice(ESTADOS))
             print("guarda3")
-            agent.save("pesos30.h5")
+            agent.save("pesosconv.h5")
 
 
 
