@@ -15,7 +15,7 @@ LEVELS = ['BustAMove.1pplay.Level10','BustAMove.1pplay.Level20','BustAMove.1ppla
            'BustAMove.1pplay.Level1',]
 CHALLENGE= ['BustAMove.Challengeplay1','BustAMove.Challengeplay2',
            'BustAMove.Challengeplay3','BustAMove.Challengeplay4']
-ESTADOS = CHALLENGE
+ESTADOS = CHALLENGE[:1]
 class Q_Agent:
     def __init__(self,state_size,action_size):
         self.state_size = state_size
@@ -24,7 +24,7 @@ class Q_Agent:
         #NUMERO DE ACCIONES A "RECORDAR"
         self.memory = deque(maxlen=300)
         #RAZON DE DESCUENTO
-        self.gamma = 0.95
+        self.gamma = 0.99
 
         #RAZON DE EXPLORACION
         self.epsilon = 1.0
@@ -53,12 +53,15 @@ class Q_Agent:
         #model.add(Dense(200, activation='relu'))
         #model.add(Dense(30, activation='relu'))
         #model.add(Dense(self.action_size, activation='linear'))
-        model.add(MaxPooling2D(pool_size=(3,3),input_shape=self.state_size))
-        model.add(Conv2D(10,kernel_size=(3,3)))
+
+        model.add(MaxPooling2D(pool_size=(3, 3), input_shape=self.state_size))
+        model.add(Conv2D(10, kernel_size=(3, 3),strides=(3,3)))
+        model.add(Conv2D(50, kernel_size=(3, 3)))
         model.add(Flatten())
         model.add(Dense(1000, activation='hard_sigmoid'))
-        model.add(Dense(5000, activation='relu'))
+        model.add(Dense(10000, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
+
         model.summary()
         model.compile(loss='mse',
                       optimizer=Adam(lr=self.learning_rate))
@@ -132,7 +135,7 @@ def main():
 
         state = func(state).reshape((1,state.shape[0],state.shape[1],state.shape[2]))
 
-
+        suma = 0
         agent.model.predict([state])
         while not done:
             #env.render()
@@ -159,7 +162,7 @@ def main():
             #env.data.set_value('arrow', shoot_angle)
             #next_state, reward, done, _a = env.step(agent.toBinary(3))
 
-            #env.render()
+            env.render()
             #print("AAAA", _a['arrow2'])
             #print("BBBB", _a['arrow'])
 
@@ -203,26 +206,21 @@ def main():
             next_score = _a['bubbles']
             #env.data
             #print(weaaa)
-            #tens = (_a['score_jyuu'] // 16) * 10
-            #hundreds = (_a['score_hyaku'] % 16) * 100
-            #thousands = ((_a['score_hyaku'] // 16)) * 1000
-            #thousands = ((_a['score_hyaku'] // 16)) * 1000
-            #ten_thousands = (_a['score_man'] % 16) * 10000
-            #hundred_thousands = ((_a['score_man']// 16)) * 100000
-            #next_score = tens + hundreds + thousands + ten_thousands + hundred_thousands
             #if next_score-current_score==0:
             #    reward = -1.0
             #else:
             #    reward = math.log(next_score-current_score)
-            recompensa = (next_score-current_score)**2
+            recompensa = next_score-current_score-1
             current_score=next_score
             #env.render()
+            suma+=recompensa
             if done:
+                print("SUMA:",suma)
                 recompensa=-10
                 print("Final score:",current_score)
             #print(current_score)
             #print(_a)
-            #print(reward)
+
             #reward = _a['score_jyuu']
             next_state = next_state[23:207,72:182]
             next_state = func(next_state).reshape(state.shape)
