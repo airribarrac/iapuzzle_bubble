@@ -1,6 +1,6 @@
 from collections import deque
 from keras.models import Sequential
-from keras.layers import Dense, Flatten, Dropout, Conv2D , LSTM, MaxPooling2D
+from keras.layers import Dense, Flatten, Dropout, Conv2D , LSTM, MaxPooling2D, GlobalAveragePooling2D
 from keras.optimizers import Adam
 import numpy as np
 import random
@@ -15,26 +15,26 @@ LEVELS = ['BustAMove.1pplay.Level10','BustAMove.1pplay.Level20','BustAMove.1ppla
            'BustAMove.1pplay.Level1',]
 CHALLENGE= ['BustAMove.Challengeplay1','BustAMove.Challengeplay2',
            'BustAMove.Challengeplay3','BustAMove.Challengeplay4']
-ESTADOS = CHALLENGE[:1]
+ESTADOS = CHALLENGE
 class Q_Agent:
     def __init__(self,state_size,action_size):
         self.state_size = state_size
         self.action_size = action_size
 
         #NUMERO DE ACCIONES A "RECORDAR"
-        self.memory = deque(maxlen=300)
+        self.memory = deque(maxlen=2000)
         #RAZON DE DESCUENTO
-        self.gamma = 0.99
+        self.gamma = 0.95
 
         #RAZON DE EXPLORACION
-        self.epsilon = 1.0
+        self.epsilon = 0.3
         #EPSILON MINIMO
-        self.min_epsilon = 0.1
+        self.min_epsilon = 0.05
         #DESCUENTO DEL EPSILON
         self.decay_epsilon = 0.9995         #DESCUENTO DEL DESCUENTO
         #self.decay_decay = 0.99999
         #RAZON DE APRENDIZAJE
-        self.learning_rate = 0.05
+        self.learning_rate = 0.01
         #MODELO CREADO
         self.model =self._build_model()
 
@@ -54,19 +54,17 @@ class Q_Agent:
         #model.add(Dense(30, activation='relu'))
         #model.add(Dense(self.action_size, activation='linear'))
 
-        model.add(MaxPooling2D(pool_size=(3, 3), input_shape=self.state_size))
-        model.add(Conv2D(10, kernel_size=(3, 3),strides=(3,3)))
-        model.add(Conv2D(50, kernel_size=(3, 3)))
+        model.add(Conv2D(32,input_shape=self.state_size, kernel_size=(4, 4),strides=(2,2),activation='relu'))
+        model.add(Conv2D(64, kernel_size=(4, 4),strides=(2,2),activation='relu'))
+        model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
         model.add(Flatten())
-        model.add(Dense(1000, activation='hard_sigmoid'))
-        model.add(Dense(10000, activation='relu'))
+        model.add(Dense(2048, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
 
-        model.summary()
+
         model.compile(loss='mse',
                       optimizer=Adam(lr=self.learning_rate))
-        for layer in model.layers:
-            print(layer.input_shape)
+        model.summary()
         return model
 
     def remember(self,state,action,reward,next_state,done):
@@ -78,7 +76,7 @@ class Q_Agent:
         else:
             act_values = self.model.predict(state)
             accion = np.argmax(act_values[0])
-            #print(accion,act_values[0][accion])
+            print(accion,act_values[0][accion])
         return accion
 
 
@@ -111,16 +109,16 @@ class Q_Agent:
 def main():
     env = retro.make(game='BustAMove-Snes', state=random.choice(ESTADOS))
 
-    state_size = env.reset()[23:207,72:182].shape
+    state_size = env.reset()[24:207:3,72:182:3].shape
     #disparar - izquierda - derecha - esperar
-    action_size = 30
+    action_size = 40
     agent = Q_Agent(state_size, action_size)
     print(state_size)
     done = False
     batch_size = 20
     episodes = 1000000
     nivelar = lambda x: 1.0 if x>127 else 0.0
-    func = np.vectorize(nivelar)
+    func = lambda x: x/255.0
     print(nivelar(255),nivelar(122))
     try:
         agent.load('pesosconv.h5')
@@ -128,24 +126,23 @@ def main():
     except:
         print("error")
     for e in range(episodes):
-        tiempo_espera = 0.01
-        state = env.reset()[23:207,72:182]
+        tiempo_espera = 1
+        state = env.reset()[24:207:3,72:182:3]
         current_score = 0.0
         done=False
-
         state = func(state).reshape((1,state.shape[0],state.shape[1],state.shape[2]))
-
         suma = 0
         agent.model.predict([state])
         while not done:
-            #env.render()
+            env.render()
             #time.sleep(tiempo_espera)
+
             #angulo buscado
             action = agent.act(state)
             #no hay angulo 64 en el juego
 
 
-            shoot_angle = 4*action+4
+            shoot_angle = 3*action+4
             if shoot_angle==64:
                 shoot_angle=65
             next_state, reward, done, _a = env.step(agent.toBinary(3))
@@ -162,7 +159,7 @@ def main():
             #env.data.set_value('arrow', shoot_angle)
             #next_state, reward, done, _a = env.step(agent.toBinary(3))
 
-            env.render()
+            #env.render()
             #print("AAAA", _a['arrow2'])
             #print("BBBB", _a['arrow'])
 
@@ -196,24 +193,30 @@ def main():
                 next_state, reward, done, _a = env.step(agent.toBinary(3))
                 if done:
                     break
+
             #print(frames)
-            #weaaa = env.data.get_variable('arrow')
-            #print(type(weaaa))
 
             #env.data.set_variable('arrow',10)
 
             #env.render()
             next_score = _a['bubbles']
             #env.data
-            #print(weaaa)
             #if next_score-current_score==0:
             #    reward = -1.0
             #else:
             #    reward = math.log(next_score-current_score)
-            recompensa = next_score-current_score-1
+            recompensa = next_score-current_score
+            suma += recompensa-1
+            if recompensa==0:
+                recompensa=-1
             current_score=next_score
+            for i in range(0, 13):
+                next_state, reward, done, _a = env.step(agent.toBinary(3))
+            if recompensa!=-1:
+                for i in range(0,40):
+                    next_state, reward, done, _a = env.step(agent.toBinary(3))
             #env.render()
-            suma+=recompensa
+
             if done:
                 print("SUMA:",suma)
                 recompensa=-10
@@ -222,8 +225,10 @@ def main():
             #print(_a)
 
             #reward = _a['score_jyuu']
-            next_state = next_state[23:207,72:182]
+            next_state = next_state[24:207:3,72:182:3]
+
             next_state = func(next_state).reshape(state.shape)
+
             #print("mi reward es ",recompensa)
             agent.remember(state, action, recompensa, next_state, done)
             state = next_state
@@ -233,8 +238,8 @@ def main():
         #print("termino")
         print(e,":")
         print(agent.epsilon)
+        env.load_state(random.choice(ESTADOS))
         if e % 50 == 0:
-            env.load_state(random.choice(ESTADOS))
             print("guarda3")
             agent.save("pesosconv.h5")
 
