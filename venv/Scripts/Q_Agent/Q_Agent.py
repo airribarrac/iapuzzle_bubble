@@ -27,14 +27,14 @@ class Q_Agent:
         self.gamma = 0.95
 
         #RAZON DE EXPLORACION
-        self.epsilon = 0.3
+        self.epsilon = 1.0
         #EPSILON MINIMO
         self.min_epsilon = 0.05
         #DESCUENTO DEL EPSILON
         self.decay_epsilon = 0.9995         #DESCUENTO DEL DESCUENTO
         #self.decay_decay = 0.99999
         #RAZON DE APRENDIZAJE
-        self.learning_rate = 0.01
+        self.learning_rate = 0.05
         #MODELO CREADO
         self.model =self._build_model()
 
@@ -54,11 +54,11 @@ class Q_Agent:
         #model.add(Dense(30, activation='relu'))
         #model.add(Dense(self.action_size, activation='linear'))
 
-        model.add(Conv2D(32,input_shape=self.state_size, kernel_size=(4, 4),strides=(2,2),activation='relu'))
+        model.add(Conv2D(32,input_shape=self.state_size, kernel_size=(8, 8),strides=(4,4),activation='relu'))
         model.add(Conv2D(64, kernel_size=(4, 4),strides=(2,2),activation='relu'))
         model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
         model.add(Flatten())
-        model.add(Dense(2048, activation='relu'))
+        model.add(Dense(512, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
 
 
@@ -97,8 +97,8 @@ class Q_Agent:
             target_f = self.model.predict(state,steps=1)
 
             target_f[0][action] = target
+            #print(target_f)
             #print("OOOO",target_f.shape)
-            #print("voy a hacer la wea")
             self.model.fit(state, target_f, epochs=1, verbose=0)
         if self.epsilon > self.min_epsilon:
             self.epsilon *= self.decay_epsilon
@@ -109,7 +109,7 @@ class Q_Agent:
 def main():
     env = retro.make(game='BustAMove-Snes', state=random.choice(ESTADOS))
 
-    state_size = env.reset()[24:207:3,72:182:3].shape
+    state_size = env.reset()[24:207:2,72:182:2].shape
     #disparar - izquierda - derecha - esperar
     action_size = 40
     agent = Q_Agent(state_size, action_size)
@@ -127,7 +127,7 @@ def main():
         print("error")
     for e in range(episodes):
         tiempo_espera = 1
-        state = env.reset()[24:207:3,72:182:3]
+        state = env.reset()[24:207:2,72:182:2]
         current_score = 0.0
         done=False
         state = func(state).reshape((1,state.shape[0],state.shape[1],state.shape[2]))
@@ -225,7 +225,7 @@ def main():
             #print(_a)
 
             #reward = _a['score_jyuu']
-            next_state = next_state[24:207:3,72:182:3]
+            next_state = next_state[24:207:2,72:182:2]
 
             next_state = func(next_state).reshape(state.shape)
 
