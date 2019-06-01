@@ -2,6 +2,8 @@ from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense, Flatten, Dropout, Conv2D , LSTM, MaxPooling2D, GlobalAveragePooling2D
 from keras.optimizers import Adam
+from keras.regularizers import l1,l2
+from keras import backend as K
 import numpy as np
 import random
 import math
@@ -24,19 +26,30 @@ class Q_Agent:
         #NUMERO DE ACCIONES A "RECORDAR"
         self.memory = deque(maxlen=2000)
         #RAZON DE DESCUENTO
-        self.gamma = 0.95
-
+        self.gammaComp = 1.0
+        self.gammaIncrease = 0.99995
+        self.minGammaComp = 0.2
         #RAZON DE EXPLORACION
         self.epsilon = 1.0
         #EPSILON MINIMO
         self.min_epsilon = 0.05
         #DESCUENTO DEL EPSILON
-        self.decay_epsilon = 0.9995         #DESCUENTO DEL DESCUENTO
+        self.decay_epsilon = 0.99993         #DESCUENTO DEL DESCUENTO
         #self.decay_decay = 0.99999
         #RAZON DE APRENDIZAJE
-        self.learning_rate = 0.05
+        self.learning_rate = 0.0005
         #MODELO CREADO
         self.model =self._build_model()
+        self.target_model = self._build_model()
+
+    def _huber_loss(self, target, prediction):
+        # sqrt(1+error^2)-1
+        error = prediction - target
+        return K.mean(K.sqrt(1 + K.square(error)) - 1, axis=-1)
+
+    def update_target_model(self):
+        # copy weights from model to target_model
+        self.target_model.set_weights(self.model.get_weights())
 
     def load(self, name):
         self.model.load_weights(name)
@@ -58,11 +71,11 @@ class Q_Agent:
         model.add(Conv2D(64, kernel_size=(4, 4),strides=(2,2),activation='relu'))
         model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
         model.add(Flatten())
-        model.add(Dense(512, activation='relu'))
+        model.add(Dense(832, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
 
 
-        model.compile(loss='mse',
+        model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
         model.summary()
         return model
@@ -85,23 +98,31 @@ class Q_Agent:
             return np.zeros(12)
         accion = [0,6,7][action]
         return np.concatenate((np.zeros(accion), np.array([1]), np.zeros(11 - accion)))
+
     def replay(self, batch_size):
         if(len(self.memory)<batch_size):
             return
         minibatch = random.sample(self.memory,batch_size)
 
         for state, action, reward, next_state, done in minibatch:
-            target = reward
-            if not done:
-                target = reward +self.gamma * np.amax(self.model.predict(next_state))
-            target_f = self.model.predict(state,steps=1)
+            target = self.model.predict(state)
+            if done:
+                target[0][action] = reward
+            else:
+                t = self.target_model.predict(next_state)[0]
+                gamma = 1.0-self.gammaComp
+                #print("gamma",gamma)
+                target[0][action] = reward + gamma*np.amax(t)
 
-            target_f[0][action] = target
+
+
             #print(target_f)
             #print("OOOO",target_f.shape)
-            self.model.fit(state, target_f, epochs=1, verbose=0)
+            self.model.fit(state, target, epochs=1, verbose=0)
         if self.epsilon > self.min_epsilon:
             self.epsilon *= self.decay_epsilon
+        if self.gammaComp > self.minGammaComp:
+            self.gammaComp *= self.gammaIncrease
 
 
 
@@ -115,11 +136,12 @@ def main():
     agent = Q_Agent(state_size, action_size)
     print(state_size)
     done = False
-    batch_size = 20
+    batch_size = 5
     episodes = 1000000
     nivelar = lambda x: 1.0 if x>127 else 0.0
     func = lambda x: x/255.0
     print(nivelar(255),nivelar(122))
+    num_accion = 0
     try:
         agent.load('pesosconv.h5')
         pass
@@ -128,6 +150,9 @@ def main():
     for e in range(episodes):
         tiempo_espera = 1
         state = env.reset()[24:207:2,72:182:2]
+        #env.data.set_value('arrow2', 4)
+        #state, reward, done, _a = env.step(agent.toBinary(3))
+        #state, reward, done, _a = env.step(agent.toBinary(3))
         current_score = 0.0
         done=False
         state = func(state).reshape((1,state.shape[0],state.shape[1],state.shape[2]))
@@ -186,7 +211,7 @@ def main():
             next_state, reward, done, _a = env.step(agent.toBinary(3))
             frames = 0
             while _a['ready_to_fire']==60963:
-                #frames+=1
+                frames+=1
                 #time.sleep(0.008)
                 #time.sleep(tiempo_espera)
                 #env.render()
@@ -206,10 +231,12 @@ def main():
             #else:
             #    reward = math.log(next_score-current_score)
             recompensa = next_score-current_score
-            suma += recompensa-1
             if recompensa==0:
                 recompensa=-1
+            suma += recompensa
+            #print(recompensa)
             current_score=next_score
+            #env.data.set_value('arrow2', 4)
             for i in range(0, 13):
                 next_state, reward, done, _a = env.step(agent.toBinary(3))
             if recompensa!=-1:
@@ -219,11 +246,11 @@ def main():
 
             if done:
                 print("SUMA:",suma)
-                recompensa=-10
+                recompensa  =-10
                 print("Final score:",current_score)
+
             #print(current_score)
             #print(_a)
-
             #reward = _a['score_jyuu']
             next_state = next_state[24:207:2,72:182:2]
 
@@ -232,12 +259,14 @@ def main():
             #print("mi reward es ",recompensa)
             agent.remember(state, action, recompensa, next_state, done)
             state = next_state
+            agent.replay(batch_size)
         #print("replay")
 
-        agent.replay(batch_size)
+        agent.update_target_model()
         #print("termino")
         print(e,":")
-        print(agent.epsilon)
+        print("epsilon: ",agent.epsilon)
+        print("gamma: ", 1.0-agent.gammaComp)
         env.load_state(random.choice(ESTADOS))
         if e % 50 == 0:
             print("guarda3")
