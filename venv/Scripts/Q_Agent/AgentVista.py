@@ -10,6 +10,7 @@ import math
 import retro
 import keyboard
 import time
+import cv2
 import matplotlib.pyplot as plt
 LEVELS = ['BustAMove.1pplay.Level10','BustAMove.1pplay.Level20','BustAMove.1pplay.Level30',
            'BustAMove.1pplay.Level40','BustAMove.1pplay.Level50','BustAMove.1pplay.Level60',
@@ -17,7 +18,7 @@ LEVELS = ['BustAMove.1pplay.Level10','BustAMove.1pplay.Level20','BustAMove.1ppla
            'BustAMove.1pplay.Level1',]
 CHALLENGE= ['BustAMove.Challengeplay1','BustAMove.Challengeplay2',
            'BustAMove.Challengeplay3','BustAMove.Challengeplay4']
-ESTADOS = CHALLENGE[:1]
+ESTADOS = CHALLENGE
 class Q_Agent:
     def __init__(self,state_size,action_size):
         self.state_size = state_size
@@ -26,15 +27,15 @@ class Q_Agent:
         #NUMERO DE ACCIONES A "RECORDAR"
         self.memory = deque(maxlen=2000)
         #RAZON DE DESCUENTO
-        self.gammaComp = 0.05
-        self.gammaIncrease = 0.99995
+        self.gammaComp = 0.2
+        self.gammaIncrease = 0.99999
         self.minGammaComp = 0.05
         #RAZON DE EXPLORACION
         self.epsilon = 0.05
         #EPSILON MINIMO
         self.min_epsilon = 0.05
         #DESCUENTO DEL EPSILON
-        self.decay_epsilon = 0.9999         #DESCUENTO DEL DESCUENTO
+        self.decay_epsilon = 0.99995         #DESCUENTO DEL DESCUENTO
         #self.decay_decay = 0.99999
         #RAZON DE APRENDIZAJE
         self.learning_rate = 0.0005
@@ -71,7 +72,7 @@ class Q_Agent:
         model.add(Conv2D(64, kernel_size=(4, 4),strides=(2,2),activation='relu'))
         model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
         model.add(Flatten())
-        model.add(Dense(1536, activation='relu'))
+        model.add(Dense(1024, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
 
 
@@ -129,46 +130,71 @@ class Q_Agent:
 
 def main():
     env = retro.make(game='BustAMove-Snes', state=random.choice(ESTADOS))
+
     state_size = env.reset()[24:207:2,72:182:2].shape
     #disparar - izquierda - derecha - esperar
     action_size = 40
     agent = Q_Agent(state_size, action_size)
     print(state_size)
-    memoria = env.em.get_state()
-    estados_extra= deque(maxlen=20)
     done = False
     batch_size = 7
     episodes = 1000000
     nivelar = lambda x: 1.0 if x>127 else 0.0
     func = lambda x: x/255.0
     print(nivelar(255),nivelar(122))
+    cv2.namedWindow('im1', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('im2', cv2.WINDOW_NORMAL)
     num_accion = 0
     try:
-        agent.load('pesosconv.h5')
+        agent.load('pesosconvvista.h5')
         pass
     except:
         print("error")
     for e in range(episodes):
         tiempo_espera = 1
-        state = env.reset()[24:207:2,72:182:2]
+        state = env.reset()[24:207,72:182]
+
+        weaita = cv2.medianBlur(state,3)//16*16
+        weaita = weaita[7::12,4::12]
+        elset = set()
+        for x in weaita:
+            for y in x:
+                elset.add((y[0],y[1],y[2]))
+
+        print(elset)
+        print(len(elset))
+        showstate = cv2.cvtColor(cv2.medianBlur(weaita,3),cv2.COLOR_BGR2RGB)
+        cv2.imshow("im1",showstate[7::12,4::12])
+
+        cv2.imshow("im2",cv2.cvtColor(weaita,cv2.COLOR_BGR2RGB))
+        cv2.waitKey()
         #env.data.set_value('arrow2', 4)
         #state, reward, done, _a = env.step(agent.toBinary(3))
         #state, reward, done, _a = env.step(agent.toBinary(3))
-        next_state, reward, done, _a = env.step(agent.toBinary(3))
-        current_score = _a['bubbles']
+        current_score = 0.0
+        state=state[::2,::2]
         done=False
+        estado = state
         state = func(state).reshape((1,state.shape[0],state.shape[1],state.shape[2]))
         suma = 0
         agent.model.predict([state])
         while not done:
-            env.render()
+            showstate = cv2.cvtColor(cv2.medianBlur(estado, 3), cv2.COLOR_BGR2RGB)
+            cv2.imshow("im1", showstate[7::12, 4::12])
+
+            cv2.imshow("im2", cv2.cvtColor(estado, cv2.COLOR_BGR2RGB))
+            cv2.waitKey()
+            #plt.figure(1)
+            #plt.imshow(showstate[7::12, 4::12])
+            #plt.figure(2)
+            #plt.imshow(showstate)
+
             #time.sleep(tiempo_espera)
 
             #angulo buscado
             action = agent.act(state)
             #no hay angulo 64 en el juego
-            if random.random()>0.95:
-                estados_extra.append(env.em.get_state())
+
 
             shoot_angle = 3*action+4
             if shoot_angle==64:
@@ -236,16 +262,13 @@ def main():
             recompensa = next_score-current_score-1
             suma += recompensa
             #print(recompensa)
-            #print(recompensa)
             current_score=next_score
             #env.data.set_value('arrow2', 4)
-            for i in range(0, 12+random.randint(0,2)):
-                env.step(agent.toBinary(3))
-            next_state, reward, done, _a = env.step(agent.toBinary(3))
-            if recompensa!=-1:
-                for i in range(0,35):
-                    env.step(agent.toBinary(3))
+            for i in range(0, 13):
                 next_state, reward, done, _a = env.step(agent.toBinary(3))
+            if recompensa!=-1:
+                for i in range(0,40):
+                    next_state, reward, done, _a = env.step(agent.toBinary(3))
             #env.render()
 
             if done:
@@ -256,6 +279,7 @@ def main():
             #print(current_score)
             #print(_a)
             #reward = _a['score_jyuu']
+            estado = next_state[24:207,72:182]
             next_state = next_state[24:207:2,72:182:2]
 
             next_state = func(next_state).reshape(state.shape)
@@ -271,14 +295,10 @@ def main():
         print(e,":")
         print("epsilon: ",agent.epsilon)
         print("gamma: ", 1.0-agent.gammaComp)
-        if True:
-            if random.random()<float(len(estados_extra))/(len(estados_extra)+10*len(ESTADOS)):
-                env.initial_state=random.choice(estados_extra)
-            else:
-                env.load_state(random.choice(ESTADOS))
+        env.load_state(random.choice(ESTADOS))
         if e % 50 == 0:
             print("guarda3")
-            agent.save("pesosconv.h5")
+            agent.save("pesosconvvista.h5")
 
 
 
